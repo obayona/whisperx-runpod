@@ -34,10 +34,10 @@ def run(job):
     # Prepare input for prediction
     predict_input = {
         'audio_file': audio_file_path,
-        'language': job_input.get('language'),
+        'language': 'en',
         'language_detection_min_prob': job_input.get('language_detection_min_prob', 0),
         'language_detection_max_tries': job_input.get('language_detection_max_tries', 5),
-        'initial_prompt': job_input.get('initial_prompt'),
+        'initial_prompt': job_input.get('initial_prompt', ''),
         'batch_size': job_input.get('batch_size', 64),
         'temperature': job_input.get('temperature', 0),
         'vad_onset': job_input.get('vad_onset', 0.500),
@@ -45,27 +45,24 @@ def run(job):
         'align_output': job_input.get('align_output', False),
         'diarization': job_input.get('diarization', False),
         'huggingface_access_token': job_input.get('huggingface_access_token'),
-        'min_speakers': job_input.get('min_speakers'),
-        'max_speakers': job_input.get('max_speakers'),
+        'min_speakers': job_input.get('min_speakers', 1),
+        'max_speakers': job_input.get('max_speakers', 2),
         'debug': job_input.get('debug', False)
     }
     
     # Run prediction
-    try:
-        result = MODEL.predict(**predict_input)
-        
-        # Convert Output model to dict for JSON serialization
-        output_dict = {
-            "segments": result.segments,
-            "detected_language": result.detected_language
-        }
-        
-        # Cleanup downloaded files
-        rp_cleanup.clean(['input_objects'])
-        cleanup_job_files(job_id)
-        
-        return output_dict
-    except Exception as e:
-        return {"error": str(e)}
+    result = MODEL.predict(**predict_input)
+    
+    # Convert Output model to dict for JSON serialization
+    output_dict = {
+        "segments": result.segments,
+        "detected_language": result.detected_language
+    }
+    
+    # Cleanup downloaded files
+    rp_cleanup.clean(['input_objects'])
+    cleanup_job_files(job_id)
+    
+    return output_dict
 
 runpod.serverless.start({"handler": run})

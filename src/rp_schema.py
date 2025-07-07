@@ -1,5 +1,5 @@
 INPUT_VALIDATIONS = {
-    'audio_file': {
+    'audio_url': {
         'type': str,
         'required': True
     },
@@ -21,7 +21,7 @@ INPUT_VALIDATIONS = {
     'initial_prompt': {
         'type': str,
         'required': False,
-        'default': None
+        'default': ''
     },
     'batch_size': {
         'type': int,
@@ -43,30 +43,15 @@ INPUT_VALIDATIONS = {
         'required': False,
         'default': 0.363
     },
-    'align_output': {
-        'type': bool,
-        'required': False,
-        'default': False
-    },
-    'diarization': {
-        'type': bool,
-        'required': False,
-        'default': False
-    },
-    'huggingface_access_token': {
-        'type': str,
-        'required': False,
-        'default': None
-    },
     'min_speakers': {
         'type': int,
         'required': False,
-        'default': None
+        'default': 1
     },
     'max_speakers': {
         'type': int,
         'required': False,
-        'default': None
+        'default': 2
     },
     'debug': {
         'type': bool,

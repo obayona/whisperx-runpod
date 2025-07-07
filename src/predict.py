@@ -16,10 +16,12 @@ compute_type = "float16"  # change to "int8" if low on GPU mem (may reduce accur
 device = "cuda"
 whisper_arch = "./models/faster-whisper-small.en"
 
+timestamps = {}
 
 class Output(BaseModel):
     segments: Any
     detected_language: str
+    timestamps: dict
 
 
 class Predictor(BasePredictor):
@@ -56,7 +58,7 @@ class Predictor(BasePredictor):
             ),
             initial_prompt: str = Input(
                 description="Optional text to provide as a prompt for the first window",
-                default=None),
+                default=''),
             batch_size: int = Input(
                 description="Parallelization of input audio transcription",
                 default=64),
@@ -69,22 +71,16 @@ class Predictor(BasePredictor):
             vad_offset: float = Input(
                 description="VAD offset",
                 default=0.363),
-            align_output: bool = Input(
-                description="Aligns whisper output to get accurate word-level timestamps",
-                default=False),
-            diarization: bool = Input(
-                description="Assign speaker ID labels",
-                default=False),
             huggingface_access_token: str = Input(
                 description="To enable diarization, please enter your HuggingFace token (read). You need to accept "
                             "the user agreement for the models specified in the README.",
                 default=None),
             min_speakers: int = Input(
                 description="Minimum number of speakers if diarization is activated (leave blank if unknown)",
-                default=None),
+                default=1),
             max_speakers: int = Input(
                 description="Maximum number of speakers if diarization is activated (leave blank if unknown)",
-                default=None),
+                default=2),
             debug: bool = Input(
                 description="Print out compute/inference times and memory usage information",
                 default=False)
@@ -132,46 +128,43 @@ class Predictor(BasePredictor):
             model = whisperx.load_model(whisper_arch, device, compute_type=compute_type, language=language,
                                         asr_options=asr_options, vad_options=vad_options)
 
-            if debug:
-                elapsed_time = time.time_ns() / 1e6 - start_time
-                print(f"Duration to load model: {elapsed_time:.2f} ms")
+            timestamps['load_model'] = time.time_ns() / 1e6 - start_time
 
             start_time = time.time_ns() / 1e6
 
             audio = whisperx.load_audio(audio_file)
 
-            if debug:
-                elapsed_time = time.time_ns() / 1e6 - start_time
-                print(f"Duration to load audio: {elapsed_time:.2f} ms")
+            timestamps['load_audio'] = time.time_ns() / 1e6 - start_time
 
             start_time = time.time_ns() / 1e6
 
             result = model.transcribe(audio, batch_size=batch_size)
             detected_language = result["language"]
 
-            if debug:
-                elapsed_time = time.time_ns() / 1e6 - start_time
-                print(f"Duration to transcribe: {elapsed_time:.2f} ms")
+            timestamps['transcribe'] = time.time_ns() / 1e6 - start_time
 
             gc.collect()
             torch.cuda.empty_cache()
             del model
+            
+            if detected_language in whisperx.alignment.DEFAULT_ALIGN_MODELS_TORCH or detected_language in whisperx.alignment.DEFAULT_ALIGN_MODELS_HF:
+                result = align(audio, result, debug)
+            else:
+                print(f"Cannot align output as language {detected_language} is not supported for alignment")
 
-            if align_output:
-                if detected_language in whisperx.alignment.DEFAULT_ALIGN_MODELS_TORCH or detected_language in whisperx.alignment.DEFAULT_ALIGN_MODELS_HF:
-                    result = align(audio, result, debug)
-                else:
-                    print(f"Cannot align output as language {detected_language} is not supported for alignment")
+            start_time = time.time_ns() / 1e6
 
-            if diarization:
-                result = diarize(audio, result, debug, huggingface_access_token, min_speakers, max_speakers)
+            result = diarize(audio, result, debug, huggingface_access_token, min_speakers, max_speakers)
+
+            timestamps['diarize'] = time.time_ns() / 1e6 - start_time
 
             if debug:
                 print(f"max gpu memory allocated over runtime: {torch.cuda.max_memory_reserved() / (1024 ** 3):.2f} GB")
 
         return Output(
             segments=result["segments"],
-            detected_language=detected_language
+            detected_language=detected_language,
+            timestamps=timestamps
         )
 
 
